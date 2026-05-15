@@ -909,10 +909,11 @@ function getBanco(bancoId) { return BANCOS[bancoId] || BANCOS.otro; }
 function calcularProximasFechas(rec, desde, hasta) {
   // Devuelve array de fechas ISO en que debe ejecutarse el recurrente entre 'desde' y 'hasta' (inclusive)
   const fechas = [];
-  const inicio = new Date(desde);
-  const fin = new Date(hasta);
-  inicio.setHours(0,0,0,0);
-  fin.setHours(0,0,0,0);
+  // Parsear fechas en zona horaria local (evita bug UTC)
+  const [dy, dm, dd] = desde.split('-').map(n => parseInt(n, 10));
+  const [hy, hm, hd] = hasta.split('-').map(n => parseInt(n, 10));
+  const inicio = new Date(dy, dm - 1, dd);
+  const fin = new Date(hy, hm - 1, hd);
 
   let cursor = new Date(inicio);
   while (cursor <= fin) {
@@ -952,13 +953,21 @@ function procesarRecurrentes() {
     if (rec.activo === false) continue;
     // Desde la última ejecución (o desde la creación) hasta hoy
     const desde = rec.ultimaEjecucion || rec.fechaCreacion || hoy;
-    // Si "desde" es hoy o futuro, no hay nada que ejecutar todavía
-    if (desde > hoy) continue;
+    // Si "desde" es hoy o futuro y ya tenemos ultimaEjecucion, no hay nada que ejecutar
+    if (rec.ultimaEjecucion && desde >= hoy) continue;
 
     // Calcular qué fechas faltan registrar
-    const desdeDate = new Date(desde);
-    desdeDate.setDate(desdeDate.getDate() + 1); // día siguiente a la última ejecución
-    const desdeAjustado = toISO(desdeDate);
+    // Si hay ultimaEjecucion, empezamos al día siguiente
+    // Si no hay (primera vez), empezamos desde la fecha de creación inclusive
+    let desdeAjustado;
+    if (rec.ultimaEjecucion) {
+      const [y, m, d] = rec.ultimaEjecucion.split('-').map(n => parseInt(n, 10));
+      const desdeDate = new Date(y, m - 1, d);
+      desdeDate.setDate(desdeDate.getDate() + 1);
+      desdeAjustado = toISO(desdeDate);
+    } else {
+      desdeAjustado = desde;
+    }
     if (desdeAjustado > hoy) continue;
 
     const fechas = calcularProximasFechas(rec, desdeAjustado, hoy);
